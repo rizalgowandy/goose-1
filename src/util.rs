@@ -1,16 +1,13 @@
 //! Utility functions used by Goose, and available when writing load tests.
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time;
 use url::Url;
 
-use crate::GooseError;
+use crate::{GooseError, CANCELED};
 
 /// Parse a string representing a time span and return the number of seconds.
 ///
@@ -250,14 +247,15 @@ pub fn median(
 /// // All characters are returned as the string is less than 15 characters long.
 /// assert_eq!(util::truncate_string("shorter string", 15), "shorter string");
 /// ```
-pub fn truncate_string(str_to_truncate: &str, max_length: u64) -> String {
-    let mut string_to_truncate = str_to_truncate.to_string();
-    if string_to_truncate.len() as u64 > max_length {
-        let truncated_length = max_length - 2;
-        string_to_truncate.truncate(truncated_length as usize);
-        string_to_truncate += "..";
+pub fn truncate_string(str_to_truncate: &str, max_length: usize) -> String {
+    if str_to_truncate.char_indices().count() > max_length {
+        match str_to_truncate.char_indices().nth(max_length - 2) {
+            None => str_to_truncate.to_string(),
+            Some((idx, _)) => format!("{}..", &str_to_truncate[..idx]),
+        }
+    } else {
+        str_to_truncate.to_string()
     }
-    string_to_truncate
 }
 
 /// Determine if a timer expired, with second granularity.
@@ -426,57 +424,26 @@ pub fn is_valid_host(host: &str) -> Result<bool, GooseError> {
 
 // Internal helper to configure the control-c handler. Shutdown cleanly on the first
 // ctrl-c. Exit abruptly on the second ctrl-c.
-pub(crate) fn setup_ctrlc_handler(canceled: &Arc<AtomicBool>) {
-    let caught_ctrlc = canceled.clone();
+pub(crate) fn setup_ctrlc_handler() {
     match ctrlc::set_handler(move || {
         // We've caught a ctrl-c, determine if it's the first time or an additional time.
-        if caught_ctrlc.load(Ordering::SeqCst) {
+        if *CANCELED.read().unwrap() {
             warn!("caught another ctrl-c, exiting immediately...");
             std::process::exit(1);
         } else {
             warn!("caught ctrl-c, stopping...");
-            caught_ctrlc.store(true, Ordering::SeqCst);
+            let mut canceled = CANCELED.write().unwrap();
+            *canceled = true;
         }
     }) {
         Ok(_) => (),
         Err(e) => {
-            info!("failed to set ctrl-c handler: {}", e);
+            // When running in tests, reset CANCELED with each new test allowing testing
+            // of the ctrl-c handler.
+            let mut canceled = CANCELED.write().unwrap();
+            *canceled = false;
+            info!("reset ctrl-c handler: {}", e);
         }
-    }
-}
-
-/// Data structure to maintain moving averages.
-///
-/// It will maintain the current average and the number of data items that
-/// were used to compute it.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MovingAverage {
-    /// Number of data items that were used to compute the current average.
-    count: u32,
-    /// Current average.
-    pub average: f32,
-}
-
-impl MovingAverage {
-    /// Create a new MovingAverage object.
-    pub fn new() -> Self {
-        MovingAverage {
-            count: 0,
-            average: 0.,
-        }
-    }
-
-    /// Adds a new data item and calculates the new average.
-    pub fn add_item(&mut self, item: f32) {
-        self.count += 1;
-        self.average += (item as f32 - self.average) / self.count as f32;
-    }
-}
-
-impl Default for MovingAverage {
-    /// Creates an empty moving average.
-    fn default() -> MovingAverage {
-        MovingAverage::new()
     }
 }
 
@@ -595,6 +562,15 @@ mod tests {
         assert_eq!(truncate_string("abcde", 4), "ab..");
         assert_eq!(truncate_string("abcde", 3), "a..");
         assert_eq!(truncate_string("abcde", 2), "..");
+        assert_eq!(truncate_string("これはテストだ", 10), "これはテストだ");
+        assert_eq!(truncate_string("これはテストだ", 3), "こ..");
+        assert_eq!(truncate_string("这是一个测试。", 10), "这是一个测试。");
+        assert_eq!(truncate_string("这是一个测试。", 3), "这..");
+        assert_eq!(
+            truncate_string("이것은 테스트입니다.", 15),
+            "이것은 테스트입니다."
+        );
+        assert_eq!(truncate_string("이것은 테스트입니다.", 3), "이..");
     }
 
     #[tokio::test]
@@ -634,65 +610,17 @@ mod tests {
     #[test]
     fn valid_host() {
         assert!(is_valid_host("http://example.com").is_ok());
-        assert!(!is_valid_host("example.com").is_ok());
+        assert!(is_valid_host("example.com").is_err());
         assert!(is_valid_host("http://example.com/").is_ok());
-        assert!(!is_valid_host("example.com/").is_ok());
+        assert!(is_valid_host("example.com/").is_err());
         assert!(is_valid_host("https://www.example.com/and/with/path").is_ok());
-        assert!(!is_valid_host("www.example.com/and/with/path").is_ok());
+        assert!(is_valid_host("www.example.com/and/with/path").is_err());
         assert!(is_valid_host("foo://example.com").is_ok());
         assert!(is_valid_host("file:///path/to/file").is_ok());
-        assert!(!is_valid_host("/path/to/file").is_ok());
-        assert!(!is_valid_host("http://").is_ok());
+        assert!(is_valid_host("/path/to/file").is_err());
+        assert!(is_valid_host("http://").is_err());
         assert!(is_valid_host("http://foo").is_ok());
         assert!(is_valid_host("http:///example.com").is_ok());
-        assert!(!is_valid_host("http:// example.com").is_ok());
-    }
-
-    #[test]
-    fn moving_average() {
-        let mut moving_average = MovingAverage::new();
-        assert_eq!(
-            moving_average,
-            MovingAverage {
-                count: 0,
-                average: 0.
-            }
-        );
-
-        moving_average.add_item(1.23);
-        assert_eq!(
-            moving_average,
-            MovingAverage {
-                count: 1,
-                average: 1.23
-            }
-        );
-
-        moving_average.add_item(2.34);
-        assert_eq!(
-            moving_average,
-            MovingAverage {
-                count: 2,
-                average: 1.785
-            }
-        );
-
-        moving_average.add_item(89.23);
-        assert_eq!(
-            moving_average,
-            MovingAverage {
-                count: 3,
-                average: 30.933332
-            }
-        );
-
-        moving_average.add_item(12.34);
-        assert_eq!(
-            moving_average,
-            MovingAverage {
-                count: 4,
-                average: 26.285
-            }
-        );
+        assert!(is_valid_host("http:// example.com").is_err());
     }
 }

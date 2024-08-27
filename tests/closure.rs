@@ -14,14 +14,14 @@ const ABOUT_PATH: &str = "/about.html";
 // Load test configuration.
 const EXPECT_WORKERS: usize = 2;
 
-// Test task.
-pub async fn get_index(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_index(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(INDEX_PATH).await?;
     Ok(())
 }
 
-// Test task.
-pub async fn get_about(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_about(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(ABOUT_PATH).await?;
     Ok(())
 }
@@ -87,8 +87,7 @@ fn common_build_configuration(
                 "--expect-workers",
                 &expect_workers.to_string(),
                 "--no-reset-metrics",
-                "--no-task-metrics",
-                "--status-codes",
+                "--no-transaction-metrics",
                 "--users",
                 &users.to_string(),
                 "--hatch-rate",
@@ -102,8 +101,7 @@ fn common_build_configuration(
             server,
             vec![
                 "--no-reset-metrics",
-                "--no-task-metrics",
-                "--status-codes",
+                "--no-transaction-metrics",
                 "--users",
                 &users.to_string(),
                 "--hatch-rate",
@@ -113,17 +111,17 @@ fn common_build_configuration(
     }
 }
 
-// Dynamically build taskset.
-fn build_taskset() -> GooseTaskSet {
+// Dynamically build scenario.
+fn build_scenario() -> Scenario {
     // Get common configuration for building endpoints and the load test itself.
     let test_endpoints = configure_mock_endpoints();
 
-    let mut taskset = GooseTaskSet::new("LoadTest");
+    let mut scenario = Scenario::new("LoadTest");
     for item in &test_endpoints {
         let path = item.path;
         let weight = item.weight;
 
-        let closure: GooseTaskFunction = Arc::new(move |user| {
+        let closure: TransactionFunction = Arc::new(move |user| {
             Box::pin(async move {
                 let _goose = user.get(path).await?;
 
@@ -131,15 +129,15 @@ fn build_taskset() -> GooseTaskSet {
             })
         });
 
-        let task = GooseTask::new(closure).set_weight(weight).unwrap();
-        // We need to do the variable dance as taskset.register_task returns self and hence moves
-        // self out of `taskset`. By storing it in a new local variable and then moving it over
+        let transaction = Transaction::new(closure).set_weight(weight).unwrap();
+        // We need to do the variable dance as scenario.register_transaction returns self and hence moves
+        // self out of `scenario`. By storing it in a new local variable and then moving it over
         // we can avoid that error.
-        let new_taskset = taskset.register_task(task);
-        taskset = new_taskset;
+        let new_scenario = scenario.register_transaction(transaction);
+        scenario = new_scenario;
     }
 
-    taskset
+    scenario
 }
 
 // Common validation for the load tests in this file.
@@ -208,10 +206,10 @@ fn validate_closer_test(
     // Confirm that we loaded the index roughly three times as much as the about page.
     let one_third_index = index.hits() / 3;
     let difference = about.hits() as i32 - one_third_index as i32;
-    assert!(difference >= -2 && difference <= 2);
+    assert!((-2..=2).contains(&difference));
 
     // Verify that Goose started the correct number of users.
-    assert!(goose_metrics.users == configuration.users.unwrap());
+    assert!(goose_metrics.total_users == configuration.users.unwrap());
 }
 
 // Helper to run the test, takes a flag for indicating if running in standalone
@@ -234,7 +232,7 @@ async fn run_load_test(is_gaggle: bool) {
 
             // Run the Goose Attack.
             let goose_metrics = common::run_load_test(
-                common::build_load_test(configuration.clone(), &build_taskset(), None, None),
+                common::build_load_test(configuration.clone(), vec![build_scenario()], None, None),
                 None,
             )
             .await;
@@ -248,7 +246,12 @@ async fn run_load_test(is_gaggle: bool) {
 
             // Workers launched in own threads, store thread handles.
             let worker_handles = common::launch_gaggle_workers(EXPECT_WORKERS, || {
-                common::build_load_test(worker_configuration.clone(), &build_taskset(), None, None)
+                common::build_load_test(
+                    worker_configuration.clone(),
+                    vec![build_scenario()],
+                    None,
+                    None,
+                )
             });
 
             // Build Manager configuration.
@@ -263,7 +266,7 @@ async fn run_load_test(is_gaggle: bool) {
             let goose_metrics = common::run_load_test(
                 common::build_load_test(
                     manager_configuration.clone(),
-                    &build_taskset(),
+                    vec![build_scenario()],
                     None,
                     None,
                 ),
@@ -280,19 +283,19 @@ async fn run_load_test(is_gaggle: bool) {
 }
 
 #[tokio::test]
-// Load test with a single task set containing two weighted tasks setup via closure.
+// Load test with a single scenario containing two weighted transactions setup via closure.
 // Validate weighting and statistics.
-async fn test_single_taskset_closure() {
+async fn test_single_scenario_closure() {
     // Run load test with is_gaggle set to false.
     run_load_test(false).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 // Spawn a gaggle of 1 manager and 2 workers each simulating one user. Run a load test,
-// with a single task set containing two weighted tasks setup via closure. Validate
+// with a single scenario containing two weighted transactions setup via closure. Validate
 // that weighting and metrics are correctly merged to the Manager.
-async fn test_single_taskset_closure_gaggle() {
+async fn test_single_scenario_closure_gaggle() {
     // Run load test with is_gaggle set to true.
     run_load_test(true).await;
 }

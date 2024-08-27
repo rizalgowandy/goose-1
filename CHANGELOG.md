@@ -1,8 +1,78 @@
 # Changelog
 
-## 0.15.3-dev
-- [#406](https://github.com/tag1consulting/goose/pull/406) make sure that the graphs are built correctly if the load test is interrupted during the starting phase
-- [#408](https://github.com/tag1consulting/goose/pull/408) update 'Running the load test' page in the Goose book to show HTML report
+## 0.17.3-dev
+ - [#565](https://github.com/tag1consulting/goose/pull/565) add `--accept-invalid-certs` to skip validation of https certificates
+ - [#568](https://github.com/tag1consulting/goose/pull/568) don't panic when truncating non utf-8 string
+ - [#574](https://github.com/tag1consulting/goose/pull/574) update [`http`](https://docs.rs/http), [`itertools`](https://docs.rs/itertools) [`nix`](https://docs.rs/nix), [`rustls`](https://docs.rs/rustls/), and [`serial_test`](https://docs.rs/serial_test)
+ - [#575](https://github.com/tag1consulting/goose/pull/575) add test coverage for sessions and cookies, revert [#557](https://github.com/tag1consulting/goose/pull/557) to avoid sharing the CookieJar between all users
+ - [#600](https://github.com/tag1consulting/goose/pull/600) Refactor reports/metrics, add JSON and markdown report
+
+## 0.17.2 August 28, 2023
+ - [#557](https://github.com/tag1consulting/goose/pull/557) speed up user initialization on Linux
+ - [#559](https://github.com/tag1consulting/goose/pull/559) disable unnecessary features in chronos, avoid potential segfault in time crate: https://rustsec.org/advisories/RUSTSEC-2020-0071
+
+## 0.17.1 August 17, 2023
+ - [#543](https://github.com/tag1consulting/goose/pull/543) remove external dependency on num_cpus(), use instead built-in available_parallelism() added in rust 1.59.0
+ - [#552](https://github.com/tag1consulting/goose/pull/552) add `scenario_index`, `scenario_name`, `transaction_index` and `transaction_name` to the request log
+ - [#553](https://github.com/tag1consulting/goose/pull/553) remove `serde_cbor` dependency no longer required due to [#529]
+ - [#554](https://github.com/tag1consulting/goose/pull/554) update `flume`, `itertools`, `strum`, `strum_macros`, `tokio-tungstenite`, and `tungestenite` dependencies to latest versions
+ - [#555](https://github.com/tag1consulting/goose/pull/555) don't panic when report has no data
+
+## 0.17.0 December 9, 2022
+ - [#529](https://github.com/tag1consulting/goose/pull/529) **API change** temporaryily removed Gaggle support `gaggle` feature) to allow upgrading Tokio and other dependencies.
+   - if you require Gaggle support, use Goose 0.16.4 with Tokio 0.15 for now; Gaggle support is being added back in https://github.com/tag1consulting/goose/pull/509
+   - updated Tokio to 1.23, updated tungestenite and tokio-tungstenite to 0.18; updated ctrlc to 3.2; updated num_cpus to 1.14, updated simplelog to 0.12, updated nix to 0.26, updated rustls to 0.20, updates serial_test to 0.9
+   - removed `nng` dependency and `gaggle` feature
+   - removed `--manager`, `--expect-workers`, `--no-hash-check`, `--manager-bind-host`, `--manager-bind-port`, `--worker`, `--manager-host`, `--manager-port` and related configuration defaults
+   - removed `AttackMode::Manager` and `AttackMode::Worker`
+   - ignore all Gaggle tests, will re-enable these tests when Gaggle support is re-implemented
+   - box `TransactionError` to avoid over-allocating memory on the stack (see `examples/session.rs` for an example of working with this)
+
+## 0.16.4 September 20, 2022
+ - [#512](https://github.com/tag1consulting/goose/pull/512) include proper HTTP method and path in logs and html report when using `GooseRequest::builder()`
+ - [#514](https://github.com/tag1consulting/goose/pull/514) fix panic when an empty wait time interval is set
+ - [#516](https://github.com/tag1consulting/goose/pull/516) fix unescaped inner quotes in csv logs
+ - [#519](https://github.com/tag1consulting/goose/pull/519) implement `Default` for `GooseConfiguration`
+ - [#522](https://github.com/tag1consulting/goose/pull/522) display times on the report in local time (instead of UTC)
+
+## 0.16.3 July 17, 2022
+ - [#498](https://github.com/tag1consulting/goose/issues/498) ignore `GooseDefault::Host` if set to an empty string
+ - [#487](https://github.com/tag1consulting/goose/pull/487) add dev-dependency on (nix)[https://docs.rs/nix] to provide test coverage confirming proper shutdown from SIGINT (ctrl-c); capture ctrl-c in a lazy_static wrapped in a RwLock so it can be reset
+ - [#489](https://github.com/tag1consulting/goose/pull/489) don't panic when writing report file and shutting down with controller
+ - [#505](https://github.com/tag1consulting/goose/pull/505) introduce `--scenarios` (and `GooseDefault::Scenarios`) so a subset of scenarios can be launched, and `--scenarios-list` to display internal machine names for matching
+
+## 0.16.2 May 20, 2022
+ - [#477](https://github.com/tag1consulting/goose/pull/477) introduce `--iterations` (and `GooseDefault::Iterations`) which configures each GooseUser to run a configurable number of iterations of the assigned Scenario then exit; introduces Scenario metrics which can be disabled with `--no-scenario-metrics` (`GooseDefault::NoScenarioMetrics`); introduces `--scenario-log` and `--scenario-format` (and `GooseDefault::ScenarioLog` and `GooseDefault::ScenarioFormat`)
+ - [#483](https://github.com/tag1consulting/goose/pull/483) remove duplicate help (-h) output
+
+## 0.16.1 May 12, 2022
+ - [#464](https://github.com/tag1consulting/goose/pull/464) add `startuptime` (and `startup_time`) TIME to controllers, setting how long the load test should spend starting configured number of users
+ - [#469](https://github.com/tag1consulting/goose/pull/469) support `users` INT command on controllers during a running load test
+ - [#473](https://github.com/tag1consulting/goose/pull/473) introduce `test-plan PLAN` command allowing configuration of test plan with the controller during running and idle load tests
+
+## 0.16.0 May 1, 2022
+ - [#431](https://github.com/tag1consulting/goose/pull/431) rename `--no-granular-data` to `--no-granular-report`
+ - [#415](https://github.com/tag1consulting/goose/pull/415) display granular data in HTML graphs, introduce `--no-granular-data` to disable it and display graphs as they were until this change
+ - [#406](https://github.com/tag1consulting/goose/pull/406) make sure that the graphs are built correctly if the load test is interrupted during the starting phase
+ - [#408](https://github.com/tag1consulting/goose/pull/408) update 'Running the load test' page in the Goose book to show HTML report
+ - [#411](https://github.com/tag1consulting/goose/pull/411) **API change**: some public APIs have been made private or removed
+   o `util::MovingAverage` structure and all related functions have been moved to a different namespace and made private
+   o `GooseRequestMetricAggregate::requests_per_second`, `GooseRequestMetricAggregate::errors_per_second` and `GooseRequestMetricAggregate::average_response_time_per_second` have been removed
+   o `GooseTaskMetricAggregate::tasks_per_second` has been removed
+   o `GooseMetrics::users_per_second` has been removed
+   o formerly public methods `report::task_metrics_template()` and `report::errors_template()` have been made private
+   o `report::graph_rps_template()`, `report::graph_eps_template()`, `report::graph_average_response_time_template()`, `report::graph_users_per_second_template()` and `report::graph_tasks_per_second_template()` have been removed
+ - [#379](https://github.com/tag1consulting/goose/pull/379) **API change**: default to `INFO` level verbosity, introduce `-q` to reduce Goose verbosity
+   o **note**: `-v` now sets Goose to `DEBUG` level verbosity which when enabled will negatively impact load test performance; set `-q` to restore previous level of verbosity
+ - [#379](https://github.com/tag1consulting/goose/pull/379) **API change**: remove `.print()` which is no longer required to display metrics after a load test, disable with `--no-print-metrics` or `GooseDefault::NoPrintMetrics`
+ - [#422](https://github.com/tag1consulting/goose/pull/422) **API change**: introduce `--test-plan` and `GooseDefault::TestPlan`
+    o internally represent all load tests as `Vec<(usize, usize)>`l test plan
+    o use [FromStr] to auto convert --test-plan "{users},{timespan};{users},{timespan}", where {users} must be an integer, ie "100", and {timespan} can be integer seconds or "30s", "20m", "3h", "1h30m", etc, to internal Vec<(usize, usize)> representation
+    o don't allow `--test-plan` together with `--users`, `--startup-time`, `--hatch-rate`, `--run-time`, `--no-reset-metrics`, `--manager` and `--worker`
+    o internal `AttackPhase`s renamed: `Starting` -> `Increase`, `Running` -> `Maintain`, `Stopping` -> `Decrease`
+ - [#449](https://github.com/tag1consulting/goose/pull/449) **API change**: rename `GooseTaskSet` -> `Scenario`, `GooseTask` -> `Transaction`, `GooseTaskResult` -> `TransationResult`, `GooseTaskEror` -> `TransactionError`, `WeightedGooseTasks` -> `WeightedTransactions`, `GooseTaskFunction` -> `TransactionFunction`, `test_start_task` -> `test_start_transaction`, `test_stop_task` -> `test_stop_transaction`, `register_task` -> `register_transaction`, `task!` -> `transaction!`, `--no-task-metrics` -> `--no-transaction-metrics`, `GooseTaskError` -> `TransactionError`
+ - [#450](https://github.com/tag1consulting/goose/pull/450) add support for variable speed and multiple decrease AttackPhases
+ - [#452](https://github.com/tag1consulting/goose/pull/452) **API change**: rename `--status-codes` to `--no-status-codes` and enable collecation and summary of status codes by default
 
 ## 0.15.2 December 13, 2021
  - [#391](https://github.com/tag1consulting/goose/pull/391) properly sleep for configured `set_wait_time()` walking regularly to exit quickly if the load test ends

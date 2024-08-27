@@ -34,22 +34,22 @@ enum TestType {
     StartAndStop,
 }
 
-// Test task.
-pub async fn setup(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn setup(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.post(SETUP_PATH, "setting up load test").await?;
     Ok(())
 }
 
-// Test task.
-pub async fn teardown(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn teardown(user: &mut GooseUser) -> TransactionResult {
     let _goose = user
         .post(TEARDOWN_PATH, "cleaning up after load test")
         .await?;
     Ok(())
 }
 
-// Test task.
-pub async fn get_index(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_index(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(INDEX_PATH).await?;
     Ok(())
 }
@@ -131,17 +131,26 @@ fn validate_test(test_type: &TestType, mock_endpoints: &[Mock]) {
 
 // Build an appropriate GooseAttack object for test type, using supplied configuration.
 fn build_goose_attack(test_type: &TestType, configuration: GooseConfiguration) -> GooseAttack {
-    let taskset = taskset!("LoadTest").register_task(task!(get_index).set_weight(9).unwrap());
-    let start_task = task!(setup);
-    let stop_task = task!(teardown);
+    let scenario =
+        scenario!("LoadTest").register_transaction(transaction!(get_index).set_weight(9).unwrap());
+    let start_transaction = transaction!(setup);
+    let stop_transaction = transaction!(teardown);
     match test_type {
-        TestType::Start => {
-            common::build_load_test(configuration, &taskset, Some(&start_task), None)
+        TestType::Start => common::build_load_test(
+            configuration,
+            vec![scenario],
+            Some(&start_transaction),
+            None,
+        ),
+        TestType::Stop => {
+            common::build_load_test(configuration, vec![scenario], None, Some(&stop_transaction))
         }
-        TestType::Stop => common::build_load_test(configuration, &taskset, None, Some(&stop_task)),
-        TestType::StartAndStop => {
-            common::build_load_test(configuration, &taskset, Some(&start_task), Some(&stop_task))
-        }
+        TestType::StartAndStop => common::build_load_test(
+            configuration,
+            vec![scenario],
+            Some(&start_transaction),
+            Some(&stop_transaction),
+        ),
     }
 }
 
@@ -201,8 +210,8 @@ async fn test_setup() {
     run_standalone_test(TestType::Start).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 // Test test_start(), in Gaggle mode.
 async fn test_setup_gaggle() {
@@ -215,8 +224,8 @@ async fn test_teardown() {
     run_standalone_test(TestType::Stop).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 // Test test_stop(), in Gaggle mode.
 async fn test_teardown_gaggle() {
@@ -229,8 +238,8 @@ async fn test_setup_teardown() {
     run_standalone_test(TestType::StartAndStop).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 /// Test test_start and test_stop together, in Gaggle mode.
 async fn test_setup_teardown_gaggle() {

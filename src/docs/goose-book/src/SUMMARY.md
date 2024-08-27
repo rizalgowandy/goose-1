@@ -1,20 +1,26 @@
 # The Goose Book
 
-[What Is Goose?](title-page.md)
-[Requirements](requirements.md)
+[What Is Goose?](title-page.md)  
+[Requirements](requirements.md)  
+[Glossary](glossary.md)  
 
 - [Getting Started](getting-started/overview.md)
     - [Creating A Load test](getting-started/creating.md)
+    - [Validating Requests](getting-started/validation.md)
     - [Running A Load Test](getting-started/running.md)
     - [Run-Time Options](getting-started/runtime-options.md)
         - [Common Options](getting-started/common.md)
+        - [Test Plan](getting-started/test-plan.md)
         - [Throttle](getting-started/throttle.md)
+        - [Limiting Scenarios](getting-started/scenarios.md)
+        - [Custom Options](getting-started/custom.md)
     - [Metrics](getting-started/metrics.md)
     - [Tips](getting-started/tips.md)
 
 - [Logging](logging/overview.md)
     - [Request Log](logging/requests.md)
-    - [Task Log](logging/tasks.md)
+    - [Transaction Log](logging/transactions.md)
+    - [Scenario Log](logging/scenarios.md)
     - [Error Log](logging/errors.md)
     - [Debug Log](logging/debug.md)
 
@@ -34,7 +40,7 @@
 
 - [Configuration](config/overview.md)
     - [Defaults](config/defaults.md)
-    - [Scheduling Users And Tasks](config/scheduler.md)
+    - [Scheduling Scenarios And Transactions](config/scheduler.md)
     - [RustLS](config/rustls.md)
 
 - [Examples](example/overview.md)

@@ -4,7 +4,7 @@ use httpmock::MockServer;
 use std::io::{self, BufRead};
 
 use goose::config::GooseConfiguration;
-use goose::goose::{GooseTask, GooseTaskSet};
+use goose::goose::{Scenario, Transaction};
 use goose::metrics::GooseMetrics;
 use goose::GooseAttack;
 
@@ -58,6 +58,9 @@ pub fn build_configuration(server: &MockServer, custom: Vec<&str>) -> GooseConfi
         }
     }
 
+    // Disable verbose output when running tests.
+    configuration.extend_from_slice(&["--quiet"]);
+
     // Parse these options to generate a GooseConfiguration.
     GooseConfiguration::parse_args_default(&configuration)
         .expect("failed to parse options and generate a configuration")
@@ -82,26 +85,28 @@ pub fn launch_gaggle_workers<F: Fn() -> GooseAttack>(
     worker_handles
 }
 
-// Create a GooseAttack object from the configuration, taskset, and optional start and
-// stop tasks.
+// Create a GooseAttack object from the configuration, Scenarios, and optional start and
+// stop Transactions.
 #[allow(dead_code)]
 pub fn build_load_test(
     configuration: GooseConfiguration,
-    taskset: &GooseTaskSet,
-    start_task: Option<&GooseTask>,
-    stop_task: Option<&GooseTask>,
+    scenarios: Vec<Scenario>,
+    start_transaction: Option<&Transaction>,
+    stop_transaction: Option<&Transaction>,
 ) -> GooseAttack {
     // First set up the common base configuration.
-    let mut goose = crate::GooseAttack::initialize_with_config(configuration)
-        .unwrap()
-        .register_taskset(taskset.clone());
+    let mut goose = crate::GooseAttack::initialize_with_config(configuration).unwrap();
 
-    if let Some(task) = start_task {
-        goose = goose.test_start(task.clone());
+    for scenario in scenarios {
+        goose = goose.register_scenario(scenario.clone());
     }
 
-    if let Some(task) = stop_task {
-        goose = goose.test_stop(task.clone());
+    if let Some(transaction) = start_transaction {
+        goose = goose.test_start(transaction.clone());
+    }
+
+    if let Some(transaction) = stop_transaction {
+        goose = goose.test_stop(transaction.clone());
     }
 
     goose

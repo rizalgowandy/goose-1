@@ -4,7 +4,7 @@ use serial_test::serial;
 mod common;
 
 use goose::config::GooseConfiguration;
-use goose::goose::GooseTaskSet;
+use goose::goose::Scenario;
 use goose::prelude::*;
 
 // Paths used in load tests performed during these tests.
@@ -42,20 +42,20 @@ enum TestType {
     Sticky,
 }
 
-// Test task.
-pub async fn get_index(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_index(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(INDEX_PATH).await?;
     Ok(())
 }
 
-// Test task.
-pub async fn get_about(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_about(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(ABOUT_PATH).await?;
     Ok(())
 }
 
-// Test task.
-pub async fn get_redirect(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_redirect(user: &mut GooseUser) -> TransactionResult {
     // Load REDIRECT_PATH and follow redirects to ABOUT_PATH.
     let mut goose = user.get(REDIRECT_PATH).await?;
 
@@ -85,8 +85,8 @@ pub async fn get_redirect(user: &mut GooseUser) -> GooseTaskResult {
     Ok(())
 }
 
-// Test task.
-pub async fn get_domain_redirect(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_domain_redirect(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(REDIRECT_PATH).await?;
     Ok(())
 }
@@ -145,7 +145,7 @@ fn setup_mock_server_endpoints<'a>(
                 server.mock(|when, then| {
                     when.method(GET).path(REDIRECT_PATH);
                     then.status(301)
-                        .header("Location", &server2.unwrap().url(INDEX_PATH));
+                        .header("Location", server2.unwrap().url(INDEX_PATH));
                 }),
                 // Next set up INDEX_PATH on server 2, store in vector at SERVER2_INDEX_KEY.
                 server2.unwrap().mock(|when, then| {
@@ -291,25 +291,25 @@ fn validate_redirect(test_type: &TestType, mock_endpoints: &[Mock]) {
     }
 }
 
-// Returns the appropriate taskset needed to build these tests.
-fn get_tasks(test_type: &TestType) -> GooseTaskSet {
+// Returns the appropriate scenario needed to build these tests.
+fn get_transactions(test_type: &TestType) -> Scenario {
     match test_type {
         TestType::Chain => {
-            taskset!("LoadTest")
+            scenario!("LoadTest")
                 // Load index directly.
-                .register_task(task!(get_index))
+                .register_transaction(transaction!(get_index))
                 // Load redirect path, redirect to redirect2 path, redirect to
                 // redirect3 path, redirect to about.
-                .register_task(task!(get_redirect))
+                .register_transaction(transaction!(get_redirect))
         }
         TestType::Domain | TestType::Sticky => {
-            taskset!("LoadTest")
+            scenario!("LoadTest")
                 // First load redirect, takes this request only to another domain.
-                .register_task(task!(get_domain_redirect))
+                .register_transaction(transaction!(get_domain_redirect))
                 // Load index.
-                .register_task(task!(get_index))
+                .register_transaction(transaction!(get_index))
                 // Load about.
-                .register_task(task!(get_about))
+                .register_transaction(transaction!(get_about))
         }
     }
 }
@@ -332,7 +332,12 @@ async fn run_standalone_test(test_type: TestType) {
 
     // Run the Goose Attack.
     common::run_load_test(
-        common::build_load_test(configuration, &get_tasks(&test_type), None, None),
+        common::build_load_test(
+            configuration,
+            vec![get_transactions(&test_type)],
+            None,
+            None,
+        ),
         None,
     )
     .await;
@@ -361,7 +366,7 @@ async fn run_gaggle_test(test_type: TestType) {
     let worker_handles = common::launch_gaggle_workers(EXPECT_WORKERS, || {
         common::build_load_test(
             worker_configuration.clone(),
-            &get_tasks(&test_type),
+            vec![get_transactions(&test_type)],
             None,
             None,
         )
@@ -372,8 +377,12 @@ async fn run_gaggle_test(test_type: TestType) {
         common_build_configuration(&server1, sticky, None, Some(EXPECT_WORKERS));
 
     // Build the load test for the Workers.
-    let manager_goose_attack =
-        common::build_load_test(manager_configuration, &get_tasks(&test_type), None, None);
+    let manager_goose_attack = common::build_load_test(
+        manager_configuration,
+        vec![get_transactions(&test_type)],
+        None,
+        None,
+    );
 
     // Run the Goose Attack.
     common::run_load_test(manager_goose_attack, Some(worker_handles)).await;
@@ -388,8 +397,8 @@ async fn test_redirect() {
     run_standalone_test(TestType::Chain).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 6)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 // Request a page that redirects multiple times with different redirect headers,
 // in Gaggle mode.
@@ -405,8 +414,8 @@ async fn test_domain_redirect() {
     run_standalone_test(TestType::Domain).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 // Request a page that redirects to another domain, in Gaggle mode.
 // Different domains are simulated with multiple mock servers running on different
@@ -423,8 +432,8 @@ async fn test_sticky_domain_redirect() {
     run_standalone_test(TestType::Sticky).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
 // Request a page that redirects to another domain with --sticky-follow enabled, in
 // Gaggle mode.

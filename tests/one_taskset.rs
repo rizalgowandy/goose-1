@@ -27,14 +27,14 @@ enum TestType {
     ResetMetrics,
 }
 
-// Test task.
-pub async fn get_index(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_index(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(INDEX_PATH).await?;
     Ok(())
 }
 
-// Test task.
-pub async fn get_about(user: &mut GooseUser) -> GooseTaskResult {
+// Test transaction.
+pub async fn get_about(user: &mut GooseUser) -> TransactionResult {
     let _goose = user.get(ABOUT_PATH).await?;
     Ok(())
 }
@@ -58,15 +58,7 @@ fn setup_mock_server_endpoints(server: &MockServer) -> Vec<Mock> {
 // Build appropriate configuration for these tests.
 fn common_build_configuration(server: &MockServer, custom: &mut Vec<&str>) -> GooseConfiguration {
     // Common elements in all our tests.
-    let mut configuration = vec![
-        "--users",
-        "2",
-        "--hatch-rate",
-        "4",
-        "--run-time",
-        "2",
-        "--status-codes",
-    ];
+    let mut configuration = vec!["--users", "2", "--hatch-rate", "4", "--run-time", "2"];
 
     // Custom elements in some tests.
     configuration.append(custom);
@@ -76,7 +68,7 @@ fn common_build_configuration(server: &MockServer, custom: &mut Vec<&str>) -> Go
 }
 
 // Helper to confirm all variations generate appropriate results.
-fn validate_one_taskset(
+fn validate_one_scenario(
     goose_metrics: &GooseMetrics,
     mock_endpoints: &[Mock],
     configuration: &GooseConfiguration,
@@ -89,7 +81,7 @@ fn validate_one_taskset(
     // Confirm that we loaded the index roughly three times as much as the about page.
     let one_third_index = mock_endpoints[INDEX_KEY].hits() / 3;
     let difference = mock_endpoints[ABOUT_KEY].hits() as i32 - one_third_index as i32;
-    assert!(difference >= -2 && difference <= 2);
+    assert!((-2..=2).contains(&difference));
 
     // Get index and about out of goose metrics.
     let index_metrics = goose_metrics
@@ -146,14 +138,14 @@ fn validate_one_taskset(
     assert!(about_metrics.fail_count == 0);
 
     // Verify that Goose started the correct number of users.
-    assert!(goose_metrics.users == configuration.users.unwrap());
+    assert!(goose_metrics.total_users == configuration.users.unwrap());
 }
 
-// Returns the appropriate taskset needed to build these tests.
-fn get_tasks() -> GooseTaskSet {
-    taskset!("LoadTest")
-        .register_task(task!(get_index).set_weight(9).unwrap())
-        .register_task(task!(get_about).set_weight(3).unwrap())
+// Returns the appropriate scenario needed to build these tests.
+fn get_transactions() -> Scenario {
+    scenario!("LoadTest")
+        .register_transaction(transaction!(get_index).set_weight(9).unwrap())
+        .register_transaction(transaction!(get_about).set_weight(3).unwrap())
 }
 
 // Helper to run all standalone tests.
@@ -174,13 +166,13 @@ async fn run_standalone_test(test_type: TestType) {
 
     // Run the Goose Attack.
     let goose_metrics = common::run_load_test(
-        common::build_load_test(configuration.clone(), &get_tasks(), None, None),
+        common::build_load_test(configuration.clone(), vec![get_transactions()], None, None),
         None,
     )
     .await;
 
     // Confirm that the load test ran correctly.
-    validate_one_taskset(&goose_metrics, &mock_endpoints, &configuration, test_type);
+    validate_one_scenario(&goose_metrics, &mock_endpoints, &configuration, test_type);
 }
 
 // Helper to run all standalone tests.
@@ -196,7 +188,12 @@ async fn run_gaggle_test(test_type: TestType) {
 
     // Workers launched in own threads, store thread handles.
     let worker_handles = common::launch_gaggle_workers(EXPECT_WORKERS, || {
-        common::build_load_test(worker_configuration.clone(), &get_tasks(), None, None)
+        common::build_load_test(
+            worker_configuration.clone(),
+            vec![get_transactions()],
+            None,
+            None,
+        )
     });
 
     // Build common configuration elements, adding Manager Gaggle flags.
@@ -217,14 +214,18 @@ async fn run_gaggle_test(test_type: TestType) {
     };
 
     // Build the load test for the Manager.
-    let manager_goose_attack =
-        common::build_load_test(manager_configuration.clone(), &get_tasks(), None, None);
+    let manager_goose_attack = common::build_load_test(
+        manager_configuration.clone(),
+        vec![get_transactions()],
+        None,
+        None,
+    );
 
     // Run the Goose Attack.
     let goose_metrics = common::run_load_test(manager_goose_attack, Some(worker_handles)).await;
 
     // Confirm that the load test ran correctly.
-    validate_one_taskset(
+    validate_one_scenario(
         &goose_metrics,
         &mock_endpoints,
         &manager_configuration,
@@ -233,33 +234,32 @@ async fn run_gaggle_test(test_type: TestType) {
 }
 
 #[tokio::test]
-// Test a single task set with multiple weighted tasks.
-async fn test_one_taskset() {
+// Test a single scenario with multiple weighted transactions.
+async fn test_one_scenario() {
     run_standalone_test(TestType::NoResetMetrics).await;
 }
 
+#[ignore]
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
 #[serial]
-// Test a single task set with multiple weighted tasks, in Gaggle mode.
-async fn test_one_taskset_gaggle() {
+// Test a single scenario with multiple weighted transactions, in Gaggle mode.
+async fn test_one_scenario_gaggle() {
     run_gaggle_test(TestType::NoResetMetrics).await;
 }
 
 #[tokio::test]
-// Test a single task set with multiple weighted tasks, enable --no-reset-metrics.
-async fn test_one_taskset_reset_metrics() {
+// Test a single scenario with multiple weighted transactions, enable --no-reset-metrics.
+async fn test_one_scenario_reset_metrics() {
     run_standalone_test(TestType::ResetMetrics).await;
 }
 
-/* @TODO: @FIXME: Goose is not resetting metrics when running in Gaggle mode.
- * Issue: https://github.com/tag1consulting/goose/issues/193
-#[test]
-#[cfg_attr(not(feature = "gaggle"), ignore)]
+#[ignore]
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 #[serial]
-// Test a single task set with multiple weighted tasks, enable --no-reset-metrics
+// Test a single scenario with multiple weighted transactions, enable --no-reset-metrics
 // in Gaggle mode.
-fn test_one_taskset_reset_metrics_gaggle() {
-    run_gaggle_test(TestType::ResetMetrics);
+// @TODO: @FIXME: Goose is not resetting metrics when running in Gaggle mode.
+// Issue: https://github.com/tag1consulting/goose/issues/193
+async fn test_one_senario_reset_metrics_gaggle() {
+    run_gaggle_test(TestType::ResetMetrics).await;
 }
-*/

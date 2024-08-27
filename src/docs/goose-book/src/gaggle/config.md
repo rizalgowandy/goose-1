@@ -1,10 +1,12 @@
 # Run-time Flags
 
+**NOTE: Gaggle support was temporarily removed as of Goose 0.17.0 (see https://github.com/tag1consulting/goose/pull/529). Use Goose 0.16.4 if you need the functionality described in this section.**
+
 * `--manager`: starts a Goose process in Manager mode. There currently can only be one Manager per Gaggle.
 * `--worker`: starts a Goose process in Worker mode. How many Workers are in a given Gaggle is defined by the `--expect-workers` option, documented below.
 * `--no-hash-check`: tells Goose to ignore if the load test application doesn't match between Worker(s) and the Manager. This is not recommended, and can cause the application to panic.
 
-The `--no-metrics`, `--only-summary`, `--no-reset-metrics`, `--status-codes`, and `--no-hash-check` flags must be set on the Manager. Workers inherit these flags from the Manager
+The `--no-metrics`, `--no-reset-metrics`, `--no-status-codes`, and `--no-hash-check` flags must be set on the Manager. Workers inherit these flags from the Manager
 
 # Run-time Options
 
